@@ -1,18 +1,21 @@
 # -*- coding: utf-8 -*-
-"""第七日 · 第一关 6×8m 工作室预览布局。
-在 studio_original.blend 的「脚本」工作区运行。
-原始模型不移动、不拆分；新建独立场景并通过集合实例摆放。
+"""第七日第一关 · 大房间布局 v2
+先在原始 Blender 场景中选择书柜全部组件或书柜集合实例，再运行。
+办公桌整体：原比例、原朝向、内部各物体原位置；仅整个组合平移。
+原始办公桌和书柜本体不会被改动；新场景仅创建集合实例。
 """
 import bpy
 import math
 from mathutils import Vector, Euler
 
-SCENE = "LEVEL01_Workshop_Preview"
+SCENE = "LEVEL01_Workshop_9x11_v2"
+ROOM_WIDTH, ROOM_DEPTH, ROOM_HEIGHT = 9.0, 11.0, 3.4
+
+# 收藏源集合, 实例名, 目标XY, 角度, 目标最大宽深高, 是否强制原尺寸
 ASSETS = [
-    ("Complete Office Workplace Setup", "PR_MainDesk", (0.1, 0.8), 180, (2.7, 2.3, 2.4)),
-    ("Corner Sofa", "PR_Sofa", (2.0, -1.7), 270, (1.65, 2.15, 1.5)),
-    ("Drawer Cabinet", "PR_Drawer", (2.35, 1.75), 0, (1.05, 1.1, 1.7)),
-    ("PROP_Bookcase", "PR_Bookcase", (-2.35, 1.3), 90, (1.15, 2.2, 2.6)),
+    ("Complete Office Workplace Setup", "PR_CompleteDesk_UNCHANGED", (0.0, 1.2), 0, None, True),
+    ("Corner Sofa", "PR_CornerSofa", (3.05, -1.6), 270, (1.7, 2.5, 1.08), False),
+    ("Drawer Cabinet", "PR_DrawerCabinet", (3.64, 2.1), 0, (1.05, .78, 1.6), False),
 ]
 
 def mat(name, rgba):
@@ -60,35 +63,73 @@ def bounds(coll):
     high = Vector(tuple(max(v[i] for v in vertices) for i in range(3)))
     return low, high
 
-def place(target, source_name, label, xy, heading, max_dims):
-    coll = bpy.data.collections.get(source_name)
-    if not coll:
-        print("未识别模型集合:", source_name)
+def get_bookcase_source():
+    """仅从当前原始场景选择或明确书柜集合识别，不猜测散落的书本。"""
+    current = bpy.context.scene
+    selected = [] if (current and current.name.startswith("LEVEL01_Workshop")) else list(bpy.context.selected_objects)
+    if len(selected) == 1 and selected[0].instance_type == 'COLLECTION' and selected[0].instance_collection:
+        print("书柜：使用选中的 BlenderKit 集合", selected[0].instance_collection.name)
+        return selected[0].instance_collection
+    if selected:
+        members = set()
+        def include(obj):
+            if obj in members:
+                return
+            members.add(obj)
+            for child in obj.children:
+                include(child)
+        for obj in selected:
+            include(obj)
+        if 0 < len(members) <= 350 and any(o.type == "MESH" for o in members):
+            col = bpy.data.collections.new("L01_SELECTED_BOOKCASE_SOURCE")
+            for obj in members:
+                col.objects.link(obj)
+            print("书柜：整体引用选中对象和子对象", len(members))
+            return col
+    for col in bpy.data.collections:
+        if col.name.startswith(("LEVEL01", "RM_", "PR_", "PZ_", "LT_")):
+            continue
+        name = col.name.lower()
+        if any(term in name for term in ("bookcase","bookshelf","书柜","书架")) and len(col.all_objects) > 0:
+            print("书柜：使用集合",col.name)
+            return col
+    print("没有识别出书柜；本次只放占位模型。请在原始场景选中完整书柜后再运行。")
+    return None
+
+def place(target, coll, label, xy, heading, max_dims=None, preserve_original=False):
+    if coll is None:
+        print("未找到模型集合:",label)
         return False
-    limit = bounds(coll)
-    if not limit:
-        print("集合无可用几何体:", source_name)
+    bbox = bounds(coll)
+    if bbox is None:
+        print("集合没有可用网格:",coll.name)
         return False
-    low, high = limit
-    dim = high - low
-    angle = math.radians(heading)
-    ca, sa = abs(math.cos(angle)), abs(math.sin(angle))
-    dx, dy = ca * dim.x + sa * dim.y, sa * dim.x + ca * dim.y
-    factor = min(max_dims[0]/max(dx,0.0001),
-                 max_dims[1]/max(dy,0.0001),
-                 max_dims[2]/max(dim.z,0.0001))
-    if factor <= 0 or factor > 10000:
-        return False
-    ob = bpy.data.objects.new(label, None)
-    target.objects.link(ob)
-    ob.instance_type = 'COLLECTION'
-    ob.instance_collection = coll
-    ob.rotation_euler.z = angle
-    ob.scale = (factor,) * 3
-    center_bottom = Vector(((low.x+high.x)*0.5, (low.y+high.y)*0.5, low.z))
-    rotated = Euler((0,0,angle)).to_matrix() @ center_bottom
-    ob.location = Vector((xy[0],xy[1],0)) - factor * rotated
-    print("已摆放:", label, "等比缩放:", round(factor,4))
+    low,high = bbox
+    ext = high-low
+    angle = 0.0 if preserve_original else math.radians(heading)
+    ca,sa = abs(math.cos(angle)),abs(math.sin(angle))
+    width = ca*ext.x + sa*ext.y
+    depth = sa*ext.x + ca*ext.y
+    if preserve_original:
+        scale = 1.0
+    else:
+        scale = min(max_dims[0]/max(width,0.00001),
+                    max_dims[1]/max(depth,0.00001),
+                    max_dims[2]/max(ext.z,0.00001))
+        scale = max(0.0001,min(scale,1000.0))
+    inst = bpy.data.objects.new(label,None)
+    target.objects.link(inst)
+    inst.instance_type = 'COLLECTION'
+    inst.instance_collection = coll
+    inst.rotation_euler.z = angle
+    inst.scale = (scale,scale,scale)
+    center_bottom = Vector(((low.x+high.x)*.5,(low.y+high.y)*.5,low.z))
+    rot = Euler((0.0,0.0,angle)).to_matrix()
+    inst.location = Vector((xy[0],xy[1],0)) - scale * (rot @ (center_bottom - coll.instance_offset))
+    print("%s 原尺寸保留=%s 组合等比系数=%.4f 实际参考占地=(%.2fm×%.2fm)" %
+          (label,str(preserve_original),scale,width*scale,depth*scale))
+    if preserve_original and (width > ROOM_WIDTH*.7 or depth > ROOM_DEPTH*.6):
+        print("提醒：办公桌可能有远距离散件或导入单位偏差，但根据你的要求不会缩放和拆分。")
     return True
 
 def marker(coll, name, pos):
@@ -99,61 +140,79 @@ def marker(coll, name, pos):
     ob.empty_display_size = .26
 
 def build():
-    # 每次运行生成独立新场景；Blender 自动在同名场景后加 .001 等后缀。
-    # 旧的预览场景和源模型都不会被删除或覆盖。
-    s = bpy.data.scenes.new(SCENE)
-    room, props, hints, view = (
-        group(s.collection,"RM_Architecture"),
-        group(s.collection,"PR_Furniture_Instances"),
-        group(s.collection,"PZ_Puzzle_Markers"),
-        group(s.collection,"LT_Camera_Light"))
+    # 读取书柜选择：必须在切换到新场景之前
+    bookshelf = get_bookcase_source()
+    scene = bpy.data.scenes.new(SCENE)
+    room = group(scene.collection,"RM_Architecture")
+    props = group(scene.collection,"PR_Furniture_Instances")
+    hints = group(scene.collection,"PZ_Puzzle_Markers")
+    view = group(scene.collection,"LT_Camera_Light")
+
     plaster = mat("L01_Plasters",(0.69,0.69,0.67))
     timber = mat("L01_FloorWood",(0.38,0.28,0.21))
     pale = mat("L01_Ceiling",(0.78,0.78,0.76))
     glass = mat("L01_Window",(0.37,0.48,0.51))
-    box(room,"RM_Floor",(0,0,-.1),(6,8,.2),timber)
-    box(room,"RM_Left",(-3,0,1.5),(.16,8,3),plaster)
-    box(room,"RM_Right",(3,0,1.5),(.16,8,3),plaster)
-    # 南侧入口 (y=-4)，留 1.2m 宽门洞
-    box(room,"RM_EntranceLeft",(-1.8,-4,1.5),(2.4,.16,3),plaster)
-    box(room,"RM_EntranceRight",(1.8,-4,1.5),(2.4,.16,3),plaster)
-    box(room,"RM_EntranceTop",(0,-4,2.72),(1.2,.16,.56),plaster)
-    # 北侧窗户 (y=4)，留 2m 窗口
-    box(room,"RM_BackLeft",(-2,4,1.5),(2,.16,3),plaster)
-    box(room,"RM_BackRight",(2,4,1.5),(2,.16,3),plaster)
-    box(room,"RM_BackSill",(0,4,.45),(2,.16,.90),plaster)
-    box(room,"RM_BackTop",(0,4,2.69),(2,.16,.62),plaster)
-    box(room,"RM_WindowGlass",(0,4,1.65),(1.91,.015,1.48),glass)
-    roof = box(room,"RM_Ceiling_HiddenForLayout",(0,0,3.08),(6,8,.16),pale)
-    # hide_set 需要物体已处于当前视图层，新创建场景尚未激活会报错。
+    half_w,half_d = ROOM_WIDTH*.5,ROOM_DEPTH*.5
+    h = ROOM_HEIGHT
+    box(room,"RM_Floor",(0,0,-.10),(ROOM_WIDTH,ROOM_DEPTH,.2),timber)
+    box(room,"RM_Left",(-half_w,0,h*.5),(.16,ROOM_DEPTH,h),plaster)
+    box(room,"RM_Right",(half_w,0,h*.5),(.16,ROOM_DEPTH,h),plaster)
+
+    entrance_width, entrance_height = 1.35, 2.38
+    side = (ROOM_WIDTH-entrance_width)*.5
+    side_x = entrance_width*.5+side*.5
+    box(room,"RM_EntranceLeft",(-side_x,-half_d,h*.5),(side,.16,h),plaster)
+    box(room,"RM_EntranceRight",(side_x,-half_d,h*.5),(side,.16,h),plaster)
+    box(room,"RM_EntranceTop",(0,-half_d,(entrance_height+h)*.5),
+        (entrance_width,.16,h-entrance_height),plaster)
+
+    window_width,window_bottom,window_top = 2.5,.95,2.72
+    side = (ROOM_WIDTH-window_width)*.5
+    side_x = window_width*.5+side*.5
+    box(room,"RM_BackLeft",(-side_x,half_d,h*.5),(side,.16,h),plaster)
+    box(room,"RM_BackRight",(side_x,half_d,h*.5),(side,.16,h),plaster)
+    box(room,"RM_BackSill",(0,half_d,window_bottom*.5),
+        (window_width,.16,window_bottom),plaster)
+    box(room,"RM_BackTop",(0,half_d,(window_top+h)*.5),
+        (window_width,.16,h-window_top),plaster)
+    box(room,"RM_WindowGlass",(0,half_d,(window_bottom+window_top)*.5),
+        (window_width-.06,.012,window_top-window_bottom),glass)
+    roof = box(room,"RM_Ceiling_HiddenForLayout",(0,0,h+.08),
+        (ROOM_WIDTH,ROOM_DEPTH,.16),pale)
     roof.hide_viewport = True
-    for name, label, xy, heading, max_dims in ASSETS:
-        placed = place(props, name, label, xy, heading, max_dims)
-        if not placed and name == "PROP_Bookcase":
-            box(props,"PLACEHOLDER_Bookcase",(-2.57,1.30,1.03),(.62,1.70,2.06),timber)
-    for name, pos in [
-        ("SPAWN_Player_1m6",(0,-3.2,1.6)),
-        ("PZ_HiddenDoor_RightWall",(2.84,-.55,1.5)),
-        ("PZ_CRT_OnDesk",(0,.6,1.05)),
-        ("PZ_OldHardDrive_7",(0,.9,.16)),
-        ("SP_Bookcase_ToCeiling",(-2.86,2.7,2.45))]:
-        marker(hints,name,pos)
-    camera_data = bpy.data.cameras.new("PlayerView_25mm")
-    camera_data.lens = 25
-    cam = bpy.data.objects.new("PlayerView_25mm",camera_data)
+
+    for source,label,xy,heading,dims,locked in ASSETS:
+        place(props,bpy.data.collections.get(source),label,xy,heading,dims,locked)
+
+    if not place(props,bookshelf,"PR_Bookcase",(-3.72,2.05),90,(.75,2.2,2.42),False):
+        box(props,"PLACEHOLDER_Bookcase_Select_Then_Rerun",(-3.8,2.0,1.12),
+            (.60,1.85,2.24),timber)
+
+    for name,position in [
+        ("SPAWN_Player_1m6",(0,-half_d+1.0,1.6)),
+        ("PZ_HiddenDoor_RightWall",(half_w-.25,-.55,1.5)),
+        ("PZ_CRT_NearDesk",(0,1.2,1.05)),
+        ("PZ_HardDrive_7",(0,1.65,.18)),
+        ("SP_BookcaseCeiling",(-half_w+.3,3.1,h-.35))]:
+        marker(hints,name,position)
+
+    cam_data = bpy.data.cameras.new("PlayerView_25mm")
+    cam_data.lens = 25
+    cam = bpy.data.objects.new("PlayerView_25mm",cam_data)
     view.objects.link(cam)
-    cam.location = (0,-3.2,1.6)
-    cam.rotation_euler = (Vector((0,1,1.4))-cam.location).to_track_quat('-Z','Y').to_euler()
-    s.camera = cam
+    cam.location = (0,-half_d+1.0,1.6)
+    cam.rotation_euler = (Vector((0,1.1,1.25))-cam.location).to_track_quat('-Z','Y').to_euler()
+    scene.camera = cam
     lamp_data = bpy.data.lights.new("CoolWindowLight",'AREA')
-    lamp_data.energy = 520
-    lamp_data.color = (.78,.87,1.)
-    light = bpy.data.objects.new("CoolWindowLight",lamp_data)
-    view.objects.link(light)
-    light.location = (0,3.25,2.75)
-    light.rotation_euler = (Vector((0,0,.9))-light.location).to_track_quat('-Z','Y').to_euler()
+    lamp_data.energy = 670
+    lamp_data.color = (.78,.87,1.0)
+    lamp = bpy.data.objects.new("CoolWindowLight",lamp_data)
+    view.objects.link(lamp)
+    lamp.location = (0,half_d-.7,h-.5)
+    lamp.rotation_euler = (Vector((0,0,1.0))-lamp.location).to_track_quat('-Z','Y').to_euler()
     if bpy.context.window:
-        bpy.context.window.scene = s
-    print("第一关预览场景已创建。请另存为 level01_layout_preview.blend，不要覆盖原文件。")
+        bpy.context.window.scene = scene
+    print("完成 9m×11m×3.4m 预览；整套电脑桌未缩放、未旋转，原组合未改变。")
+    print("请在 Blender 中【文件 → 另存为】，不要覆盖 studio_original.blend。")
 
 build()
