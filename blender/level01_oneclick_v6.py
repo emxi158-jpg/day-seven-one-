@@ -841,7 +841,7 @@ def v6_wood_mat(name, base, alternate):
 
 
 def v6_piece(target, label, pos, dims, mat, bevel=.008):
-    obj=v5_box(target,label,pos,dims,mat)
+    obj=block(target,label,pos,dims,mat)
     if bevel:
         modifier=obj.modifiers.new("Soft_rounded_edges","BEVEL")
         modifier.width=min(bevel,min(dims)*.20)
@@ -971,18 +971,20 @@ def build():
         raise RuntimeError("找不到原始完整电脑桌，请先打开 studio_original.blend。")
     created = target is None
     if created:
-        target=v5_create_architecture()
-        v5_add_other_furniture(target,source)
+        v5_build_room()
+        target = next((scene for scene in reversed(list(bpy.data.scenes)) if scene.name.startswith(TARGET_SCENE_PREFIX)), None)
+        if target is None:
+            raise RuntimeError("自动创建房间后未找到新场景，请保存截图给我。")
 
     furniture=find_or_make_preview_furniture(target)
     existing_desks=[o for o in target.objects
                     if o.name in ("L01_v4_Desk_Complete_KeepOriginal",
                                   "L01_v5_Desk_Complete_KeepOriginal",
-                                  "PR_MainDesk_LOCKED_UNCHANGED",
-                                  "PR_CompleteDesk_UNCHANGED")]
+                                  "L01_v6_Desk_Complete_KeepOriginal")]
     if existing_desks:
         report("办公桌已存在且用户确认摆放正确：完全不动它。")
     elif source:
+        replace_preview(target,set(PREVIEW_DESK_NAMES))
         items=choose_complete_desk(source)
         desk_coll, desk_bounds=make_snapshot_collection(
             source,items,"L01_v6_Desk_Unchanged_WithChair")
