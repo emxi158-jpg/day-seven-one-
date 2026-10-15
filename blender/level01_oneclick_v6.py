@@ -999,9 +999,9 @@ def build():
     # 只有找到真正的源书柜后，才从【预览场景】删除之前偏小、空置的书柜实例。
     if shelf and books:
         for obj in list(target.objects):
-            if obj.name in PREVIEW_BOOK_NAMES or obj.name in (
-                "L01_v4_Bookcase_Clean","L01_v6_Bookcase_FullBooks") or
-                    obj.name.startswith(("PLACEHOLDER_BOOKCASE","PLACEHOLDER_Bookcase")):
+            if (obj.name in PREVIEW_BOOK_NAMES or
+                obj.name in ("L01_v4_Bookcase_Clean","L01_v6_Bookcase_FullBooks") or
+                obj.name.startswith(("PLACEHOLDER_BOOKCASE","PLACEHOLDER_Bookcase"))):
                 bpy.data.objects.remove(obj,do_unlink=True)
         v6_make_shelf_instance(bookshelf_source,shelf,shelf_bounds,books,furniture)
     else:
