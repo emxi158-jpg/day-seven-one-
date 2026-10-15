@@ -99,8 +99,8 @@ def marker(coll, name, pos):
     ob.empty_display_size = .26
 
 def build():
-    if bpy.data.scenes.get(SCENE):
-        raise RuntimeError("预览场景已存在，请先另存文件并重命名旧预览场景。")
+    # 每次运行生成独立新场景；Blender 自动在同名场景后加 .001 等后缀。
+    # 旧的预览场景和源模型都不会被删除或覆盖。
     s = bpy.data.scenes.new(SCENE)
     room, props, hints, view = (
         group(s.collection,"RM_Architecture"),
@@ -125,7 +125,8 @@ def build():
     box(room,"RM_BackTop",(0,4,2.69),(2,.16,.62),plaster)
     box(room,"RM_WindowGlass",(0,4,1.65),(1.91,.015,1.48),glass)
     roof = box(room,"RM_Ceiling_HiddenForLayout",(0,0,3.08),(6,8,.16),pale)
-    roof.hide_set(True)
+    # hide_set 需要物体已处于当前视图层，新创建场景尚未激活会报错。
+    roof.hide_viewport = True
     for name, label, xy, heading, max_dims in ASSETS:
         placed = place(props, name, label, xy, heading, max_dims)
         if not placed and name == "PROP_Bookcase":
