@@ -254,11 +254,11 @@ def style_existing_architecture(target):
         n=obj.name
         if n.startswith("RM_Floor"):
             assign_material(obj,floor)
+        elif n.startswith("RM_WindowGlass"):
+            assign_material(obj,glass)
         elif n.startswith(wall_prefix):
             if obj.type=='MESH':
                 assign_material(obj,wall)
-        elif n.startswith("RM_WindowGlass"):
-            assign_material(obj,glass)
         elif n.startswith("RM_Ceiling") or n.startswith("SR_Ceiling"):
             if obj.type=='MESH':
                 assign_material(obj,ceiling)
@@ -722,6 +722,8 @@ def main():
     target["L01_v8_locked_desk"]="complete original desk + chair + props untouched"
     target["L01_v8_bookcase"]="original books preserved"
     target["L01_v8_next_step"]="surreal spatial distortion / puzzle dressing"
+    # 保留参考图阶段的真实工作室基底；空间错乱下一版再叠加。
+    target["L01_v8_reference_note"]="reference image = realistic base pass; surreal pass comes later"
 
     txt=bpy.data.texts.get("L01_v8_场景说明") or bpy.data.texts.new("L01_v8_场景说明")
     txt.clear()
