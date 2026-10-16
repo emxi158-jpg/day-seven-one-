@@ -144,6 +144,17 @@ def remove_old_generated_room(scene):
         "office workplace", "manager chair", "书"
     )
     for o in list(scene.objects):
+        # 旧脚本生成的书柜/隐藏房/参考场景实例必须清掉，
+        # 否则会被 V9 误识别成“原始书柜”而再次缩放。
+        if o.name.startswith((
+            "L01_v4_Bookcase", "L01_v5_Bookcase", "L01_v6_Bookcase",
+            "L01_v7_Bookcase", "L01_v8_Bookcase",
+            "PLACEHOLDER_BOOKCASE", "PLACEHOLDER_Bookcase",
+            "SR_", "V6_SR_", "V8_"
+        )):
+            bpy.data.objects.remove(o, do_unlink=True)
+            continue
+
         if not o.name.startswith(prefixes):
             continue
         n = o.name.lower()
