@@ -590,6 +590,41 @@ def right_storage(col):
         for dy in (-.28,.05):
             cylinder_between(col,"V8_BasketWire",(bx-.18,y+dy,.30),(bx+.18,y+dy,.30),.009,wire,8)
 
+def ensure_basic_furniture(col, target):
+    """参考图所需的沙发和五层文件柜。
+    优先保留上一版真实资源；只有找不到真实预览实例时才生成简化占位。
+    """
+    sofa=next((o for o in target.objects if o.name.startswith("PR_CornerSofa")),None)
+    cabinet=next((o for o in target.objects if o.name.startswith("PR_DrawerCabinet")),None)
+
+    fabric=mat("V8_SofaFabric",(0.18,0.15,0.13),rough=.94)
+    sofa_wood=mat("V8_SofaWood",(0.20,0.12,0.07),rough=.82)
+    metal=mat("V8_CabinetMetal",(0.10,0.11,0.105),rough=.62,metallic=.55)
+    drawer=mat("V8_CabinetFace",(0.16,0.16,0.15),rough=.72)
+
+    if sofa is None:
+        x,y=SOFA_XY
+        box(col,"V8_Sofa_Base",(x,y,.34),(1.95,.86,.38),sofa_wood,.06)
+        box(col,"V8_Sofa_Seat",(x,y,.62),(1.80,.78,.28),fabric,.07)
+        box(col,"V8_Sofa_Back",(x,y+.30,1.12),(1.82,.22,1.05),fabric,.07)
+        for dx in (-.88,.88):
+            box(col,"V8_Sofa_Arm",(x+dx,y,.83),(.18,.86,.72),fabric,.05)
+        log("未找到上一版沙发实例，已生成简化沙发占位。")
+    else:
+        sofa.location.x,sofa.location.y=SOFA_XY
+        sofa.rotation_euler.z=math.radians(270)
+
+    if cabinet is None:
+        x,y=CABINET_XY
+        box(col,"V8_FilingCabinet_Body",(x,y,.88),(.72,.62,1.76),metal,.025)
+        for i,z in enumerate((.36,.69,1.02,1.35,1.68)):
+            box(col,"V8_FilingDrawer_%02d"%i,(x,y-.32,z),(.62,.045,.26),drawer,.01)
+            box(col,"V8_FilingHandle_%02d"%i,(x,y-.35,z),(.18,.035,.025),metal,.004)
+        log("未找到上一版文件柜实例，已生成简化五层文件柜占位。")
+    else:
+        cabinet.location.x,cabinet.location.y=CABINET_XY
+
+
 def simple_coffee_table(col):
     wood=mat("V8_CoffeeTableWood",(0.23,0.15,0.095),rough=.78)
     metal=mat("V8_CoffeeTableMetal",(0.08,0.085,0.08),rough=.45,metallic=.65)
@@ -699,17 +734,8 @@ def main():
     simple_coffee_table(env)
     floor_props(env)
 
-    # 5. 如果上一版已经存在脚本摆好的沙发/文件柜，只移动“预览实例”到参考图位置；
-    #    不碰源文件资产。
-    sofa=next((o for o in target.objects if o.name.startswith("PR_CornerSofa")),None)
-    if sofa:
-        sofa.location.x,sofa.location.y=SOFA_XY
-        sofa.rotation_euler.z=math.radians(270)
-        log("沙发预览实例移到右侧休息区。")
-    cabinet=next((o for o in target.objects if o.name.startswith("PR_DrawerCabinet")),None)
-    if cabinet:
-        cabinet.location.x,cabinet.location.y=CABINET_XY
-        log("文件柜预览实例移到右后侧。")
+    # 5. 沙发/文件柜：优先使用上一版真实资源，没有才生成占位。
+    ensure_basic_furniture(env,target)
 
     # 6. 相机/灯光。
     camera_and_lighting(target,env)
